@@ -202,7 +202,7 @@ pip install torch transformers flask flask-cors numpy
 ollama pull qwen2:0.5b
 ```
 
-*(Note: If you have more RAM, you can swap `qwen2:0.5b` for a larger model in `server/index.js`. The code is model-agnostic.)*
+*(If you have more RAM, you can swap `qwen2:0.5b` for a larger model in `server/index.js`. The code is model-agnostic.)*
 
 ### 3. Start the Four Services
 
@@ -215,7 +215,7 @@ ollama run qwen2:0.5b
 ```bash
 python server/r3_server.py
 ```
-*(This will download ~4.8GB of R3 model weights on first run. Be patient.)*
+*(This will download ~4.8GB of R3 model weights on first run.)*
 
 **Terminal 3 - Node.js Backend:**
 ```bash

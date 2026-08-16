@@ -59,6 +59,10 @@ function App() {
   const [assistantQuestion, setAssistantQuestion] = useState('')
   const [assistantAnswer, setAssistantAnswer] = useState('')
   const [assistantLoading, setAssistantLoading] = useState(false)
+  const [assistantModel, setAssistantModel] = useState('original')
+  const [r3Query, setR3Query] = useState('')
+  const [r3Result, setR3Result] = useState(null)
+  const [r3Loading, setR3Loading] = useState(false)
 
 
 
@@ -1363,28 +1367,89 @@ const threatTimeline = [
 ]
 .slice(0, 50)
 
-const askDashboardAssistant = async () => {
+const askDashboardAssistant = async (modelType = 'original') => {
   if (!assistantQuestion.trim()) return
 
   setAssistantLoading(true)
   setAssistantAnswer('')
+  setAssistantModel(modelType)
+
+  // Helper: strip Three.js internal objects and limit data
+  const cleanEvent = (event) => {
+    if (!event || typeof event !== 'object') return event
+    const { __threeObjPoint, __threeObjLabel, __threeObjDot, ...rest } = event
+    return {
+      title: rest.title,
+      type: rest.type,
+      location: rest.location,
+      time: rest.time,
+      details: rest.details?.slice(0, 200),
+      lat: rest.lat,
+      lng: rest.lng,
+      size: rest.size,
+      color: rest.color
+    }
+  }
+
+  const cleanArray = (arr, limit = 5) => {
+    if (!Array.isArray(arr)) return []
+    return arr.slice(0, limit).map(cleanEvent)
+  }
+
+  const cleanTopThreat = (threat) => {
+    if (!threat) return null
+    const { __threeObjPoint, __threeObjLabel, __threeObjDot, ...rest } = threat
+    return {
+      title: rest.title,
+      type: rest.type,
+      location: rest.location,
+      details: rest.details?.slice(0, 300),
+      time: rest.time
+    }
+  }
+
+  const cleanCorrelations = (corrs) => {
+    if (!Array.isArray(corrs)) return []
+    return corrs.slice(0, 5).map(c => ({
+      cveId: c.cveId,
+      priority: c.priority,
+      confidence: c.confidence,
+      sources: c.sources,
+      correlationReason: c.correlationReason
+    }))
+  }
 
   const dashboardData = {
     globalRiskLevel,
     globalRiskScore,
-    topThreat,
-    correlatedThreats,
+    topThreat: cleanTopThreat(topThreat),
+    correlatedThreats: cleanCorrelations(correlatedThreats),
     dashboardStats,
     feedHealth,
-    threatTimeline: threatTimeline.slice(0, 10),
-    aircraft: aircraft.slice(0, 10),
-    maritime: vessels.slice(0, 10),
-    earthquakes: earthquakes.slice(0, 10),
-    volcanoes: volcanoes.slice(0, 10)
+    earthquakes: cleanArray(earthquakes, 5),
+    volcanoes: cleanArray(volcanoes, 5),
+    cves: cleanArray(cves, 5),
+    kevAlerts: cleanArray(kevAlerts, 5),
+    ransomwareAlerts: cleanArray(ransomwareAlerts, 5),
+    threatIntelAlerts: cleanArray(threatIntelAlerts, 5),
+    breachAlerts: cleanArray(breachAlerts, 5),
+    internetOutages: cleanArray(internetOutages, 5),
+    bgpAlerts: cleanArray(bgpAlerts, 5),
+    aircraft: cleanArray(aircraft, 5),
+    maritime: cleanArray(vessels, 5)
   }
 
+  const endpoint = modelType === 'deterministic'
+    ? 'http://localhost:5050/api/assistant/deterministic'
+    : modelType === 'probabilistic'
+    ? 'http://localhost:5050/api/assistant/probabilistic'
+    : 'http://localhost:5050/api/assistant'
+
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), 240000)
+
   try {
-    const response = await fetch('http://localhost:5050/api/assistant', {
+    const response = await fetch(endpoint, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
@@ -1392,16 +1457,57 @@ const askDashboardAssistant = async () => {
       body: JSON.stringify({
         question: assistantQuestion,
         dashboard: dashboardData
-      })
+      }),
+      signal: controller.signal
     })
+
+    clearTimeout(timeoutId)
+
+    if (!response.ok) {
+      throw new Error(`Server error: ${response.status}`)
+    }
 
     const data = await response.json()
 
     setAssistantAnswer(data.answer || data.error || 'No answer returned.')
   } catch (error) {
-    setAssistantAnswer('Could not connect to local AI assistant.')
+    if (error.name === 'AbortError') {
+      setAssistantAnswer('Request timed out. The model took too long to respond.')
+    } else {
+      setAssistantAnswer(`Could not connect to ${modelType} model.`)
+    }
   } finally {
     setAssistantLoading(false)
+  }
+}
+
+const routeWithR3 = async () => {
+  if (!r3Query.trim()) return
+
+  setR3Loading(true)
+  setR3Result(null)
+
+  try {
+    const response = await fetch('http://localhost:5050/api/r3/route', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        query: r3Query.trim()
+      })
+    })
+
+    if (!response.ok) {
+      throw new Error(`Server error: ${response.status}`)
+    }
+
+    const data = await response.json()
+    setR3Result(data)
+  } catch (error) {
+    setR3Result({ error: 'R3-Skill routing failed. Check that the Python server is running on port 5051.' })
+  } finally {
+    setR3Loading(false)
   }
 }
 
@@ -1856,18 +1962,102 @@ const askDashboardAssistant = async () => {
     className="assistantInput"
   />
 
-  <button
-    className="clearButton"
-    onClick={askDashboardAssistant}
-    disabled={assistantLoading}
-  >
-    {assistantLoading ? 'Thinking...' : 'Ask AI Assistant'}
-  </button>
+  <div style={{ display: 'flex', gap: '8px', marginTop: '10px', flexWrap: 'wrap' }}>
+    <button
+      className="clearButton"
+      onClick={() => askDashboardAssistant('original')}
+      disabled={assistantLoading}
+      style={{ flex: 1, fontSize: '11px' }}
+    >
+      {assistantLoading && assistantModel === 'original' ? 'Thinking...' : 'Original'}
+    </button>
+    <button
+      className="clearButton"
+      onClick={() => askDashboardAssistant('deterministic')}
+      disabled={assistantLoading}
+      style={{ flex: 1, fontSize: '11px', backgroundColor: assistantModel === 'deterministic' ? '#00bfff' : '', color: assistantModel === 'deterministic' ? '#000' : '' }}
+    >
+      {assistantLoading && assistantModel === 'deterministic' ? 'Thinking...' : 'Deterministic'}
+    </button>
+    <button
+      className="clearButton"
+      onClick={() => askDashboardAssistant('probabilistic')}
+      disabled={assistantLoading}
+      style={{ flex: 1, fontSize: '11px', backgroundColor: assistantModel === 'probabilistic' ? '#ffaa00' : '', color: assistantModel === 'probabilistic' ? '#000' : '' }}
+    >
+      {assistantLoading && assistantModel === 'probabilistic' ? 'Thinking...' : 'Probabilistic'}
+    </button>
+  </div>
 
   {assistantAnswer && (
-<div className="assistantAnswer">
-  <ReactMarkdown>{assistantAnswer}</ReactMarkdown>
+    <div className="assistantAnswer" style={{ marginTop: '15px' }}>
+      <div style={{ 
+        fontSize: '10px', 
+        textTransform: 'uppercase', 
+        letterSpacing: '1px',
+        color: assistantModel === 'deterministic' ? '#00bfff' : assistantModel === 'probabilistic' ? '#ffaa00' : '#888',
+        marginBottom: '8px',
+        fontWeight: 'bold'
+      }}>
+        Model: {assistantModel === 'original' ? 'Original Assistant' : assistantModel === 'deterministic' ? 'Model A — Deterministic' : 'Model B — Probabilistic'}
+      </div>
+      <ReactMarkdown>{assistantAnswer}</ReactMarkdown>
+    </div>
+  )}
 </div>
+
+<div className="sectionTitle">R3-SKILL ROUTER (Model C)</div>
+
+<div className="card detailCard">
+  <textarea
+    value={r3Query}
+    onChange={(e) => setR3Query(e.target.value)}
+    placeholder="Describe an event to find the best response skill..."
+    className="assistantInput"
+  />
+
+  <button
+    className="clearButton"
+    onClick={routeWithR3}
+    disabled={r3Loading}
+    style={{ marginTop: '8px', width: '100%' }}
+  >
+    {r3Loading ? 'Routing...' : 'Find Best Skill'}
+  </button>
+
+  {r3Result?.best_skill && (
+    <div style={{ marginTop: '12px', borderTop: '1px solid #444', paddingTop: '10px' }}>
+      <div style={{ 
+        fontSize: '10px', 
+        textTransform: 'uppercase', 
+        letterSpacing: '1px',
+        color: '#00ffaa',
+        marginBottom: '6px',
+        fontWeight: 'bold'
+      }}>
+        Model: Model C — Tencent R3-Skill
+      </div>
+      <p style={{ margin: '4px 0' }}><strong>Matched Skill:</strong> <span style={{ color: '#00ffaa' }}>{r3Result.best_skill.name}</span></p>
+      <p style={{ margin: '4px 0', fontSize: '12px' }}><strong>Confidence:</strong> {r3Result.best_skill.confidence}</p>
+      <p style={{ margin: '4px 0', fontSize: '11px', color: '#aaa' }}>{r3Result.best_skill.description}</p>
+      
+      {r3Result.top_matches && r3Result.top_matches.length > 1 && (
+        <div style={{ marginTop: '8px' }}>
+          <p style={{ fontSize: '10px', textTransform: 'uppercase', letterSpacing: '1px', color: '#888' }}>Top Matches:</p>
+          {r3Result.top_matches.slice(1).map((match, i) => (
+            <p key={i} style={{ fontSize: '11px', color: '#aaa', margin: '2px 0' }}>
+              {i + 2}. {match.name} (rerank: {match.rerank_score})
+            </p>
+          ))}
+        </div>
+      )}
+    </div>
+  )}
+
+  {r3Result?.error && (
+    <p style={{ color: '#ff4444', marginTop: '10px', fontSize: '12px' }}>
+      {r3Result.error}
+    </p>
   )}
 </div>
 

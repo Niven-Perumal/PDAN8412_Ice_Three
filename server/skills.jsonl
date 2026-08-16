@@ -1,0 +1,8 @@
+{"name": "disaster-response", "description": "Coordinate emergency response for natural disasters including earthquakes, tsunamis, volcanic eruptions, and severe weather events"}
+{"name": "cyber-alert", "description": "Escalate cybersecurity incidents including CVEs, ransomware attacks, data breaches, and known exploited vulnerabilities"}
+{"name": "infrastructure-check", "description": "Assess damage to internet, power, transportation, and communication networks during outages or attacks"}
+{"name": "maritime-redirect", "description": "Reroute vessels and maritime traffic away from hazardous zones, conflict areas, or environmental disasters"}
+{"name": "aircraft-grounding", "description": "Issue no-fly orders or reroute aircraft around dangerous airspace, volcanic ash, or severe weather"}
+{"name": "space-debris-warn", "description": "Alert satellite operators and space agencies about geomagnetic storms, debris, or orbital collisions"}
+{"name": "threat-intel-brief", "description": "Compile and distribute intelligence briefings on correlated threats, active CVEs, and emerging attack patterns"}
+{"name": "public-health-alert", "description": "Issue health warnings and coordinate medical response for biological threats, pandemics, or environmental hazards"}

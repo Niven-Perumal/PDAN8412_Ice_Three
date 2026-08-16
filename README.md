@@ -257,7 +257,7 @@ Navigate to `http://localhost:5173`
 | **Output behavior** | Identical every run | Varies in wording and emphasis |
 | **Trade-off** | Boring but reliable | Insightful but inconsistent |
 
-**How we proved it:**  
+**How it was proved:**  
 Asking the same question (`"What is the global risk level?"`) through both models showed clear divergence. The deterministic model returned rigid, nearly identical structured reports on repeated runs. The probabilistic model shifted its phrasing, highlighted different threat details, and occasionally reordered its analysis between runs - all from the same dashboard snapshot.
 
 ---
